@@ -249,6 +249,7 @@ function getUnitToSpawn(units)
 	
 	local team_size=BotApi.Instance.teamSize
 	local income=BotApi.Commands:Income(BotApi.Instance.playerId)
+	local formula=(374*income-31.3*income*income+1.1*income*income*income-1.3) + (354.5*team_size-23*team_size*team_size-342)
 	local quants=Quants 												-- Some optimisation things here.
 	local updateTU=updateTimedUnits
 	local getUP=getUnitPriority
@@ -259,7 +260,7 @@ function getUnitToSpawn(units)
 			break
 		end
 
-		if ((374*income-31.3*income*income+1.1*income*income*income-1.3) + (354.5*team_size-23*team_size*team_size-342)) >= unit.cost and quants>unit.wait_at_quant then	-- Formulas
+		if formula >= unit.cost and quants>unit.wait_at_quant then	-- Formulas
 			if unit.charge>25 then
 				if updateTU(unit)==0 then
 					goto continue
