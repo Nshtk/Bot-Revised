@@ -1,0 +1,6 @@
+{mod
+	{name "Bot revised"}
+	{desc "Bot revised for every modification (i hope so)."}
+	{minGameVersion "3.250"}
+	{maxGameVersion "3.265"}
+}
