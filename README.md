@@ -3,6 +3,9 @@ This mod adds new Ai to Men of War: Assault Squad 2 to make it more fun (and eas
 ## Steam links
 #### [Vanilla version](https://steamcommunity.com/sharedfiles/filedetails/?id=2563977509)
 #### [Tanks+ version](https://steamcommunity.com/sharedfiles/filedetails/?id=2563548095)
+#### [ASV version](https://steamcommunity.com/sharedfiles/filedetails/?id=2575016736)
+#### [World War 3 version](https://steamcommunity.com/sharedfiles/filedetails/?id=2574393092)
+#### [Great War Realism version](https://steamcommunity.com/sharedfiles/filedetails/?id=2575472270)
 
 ## Important note and enabling instruction:
 To enable this mod you should simply change path in
