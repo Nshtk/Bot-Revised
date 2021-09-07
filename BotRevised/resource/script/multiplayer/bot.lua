@@ -196,22 +196,21 @@ function getFlagToCapture(flagPoints)
 	end
 end
 
-function getUnitPriority(unit)
-	local flags_captured, flags_enemy, flags_neutral = 0, 0, 0
-
+function getFlagTable()
 	local team_my=BotApi.Instance.team
 	local team_enemy=BotApi.Instance.enemyTeam
 
+	local flags = {captured=0, enemy=0, neutral=0}
 	for i, flag in pairs(BotApi.Scene.Flags) do
-		if 	   flag.occupant == team_my    then flags_captured = flags_captured+1
-		elseif flag.occupant == team_enemy then flags_enemy    = flags_enemy+1
-		else 
-			   flags_neutral = flags_neutral+1
-		end
+		if 	   flag.occupant == team_my    then flags.captured = flags.captured+1
+		elseif flag.occupant == team_enemy then flags.enemy    = flags.enemy+1
+		else 									flags.neutral  = flags.neutral+1 end
 	end
 
-	local enemy_has_tanks = BotApi.Commands:EnemyHasTanks()
+	return flags
+end
 
+function getUnitPriority(unit, enemy_has_tanks, flags)
 	if unit.class==UnitClass.Infantry  and enemy_has_tanks		   then return 5 end
 	if unit.class==UnitClass.Vehicle   and flags_neutral>0 		   then return 3 end
 	if unit.class==UnitClass.Tank      and enemy_has_tanks		   then return 2 end
@@ -244,15 +243,12 @@ function getUnitToSpawn(units)
 	if not units then
 		return nil
 	end
-	
-	local units_to_spawn = {}
-	
+
+	local units_to_spawn={}
 	local team_size=BotApi.Instance.teamSize
-	local income=BotApi.Commands:Income(BotApi.Instance.playerId)
+	local income, enemy_has_tanks, current_flags = BotApi.Commands:Income(BotApi.Instance.playerId), BotApi.Commands:EnemyHasTanks(), getFlagTable()
+	local quants, updateTU, getUP = Quants, updateTimedUnits, getUnitPriority -- Some optimisation things here.
 	local formula=(374*income-31.3*income*income+1.1*income*income*income-1.3) + (354.5*team_size-23*team_size*team_size-342)
-	local quants=Quants 												-- Some optimisation things here.
-	local updateTU=updateTimedUnits
-	local getUP=getUnitPriority
 
 	local total_rate=1
 	for i, unit in pairs(units) do
@@ -267,7 +263,7 @@ function getUnitToSpawn(units)
 				end
 			end
 
-			local rate = getUP(unit)
+			local rate = getUP(unit, enemy_has_tanks, current_flags)
 			total_rate=total_rate+rate
 			if rate>0 then
 				table.insert(units_to_spawn, {u=unit, r=rate})
