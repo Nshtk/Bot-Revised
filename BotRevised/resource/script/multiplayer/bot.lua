@@ -212,12 +212,12 @@ end
 
 function getUnitPriority(unit, enemy_has_tanks, flags)
 	if unit.class==UnitClass.Infantry  and enemy_has_tanks		   then return 5 end
-	if unit.class==UnitClass.Vehicle   and flags_neutral>0 		   then return 3 end
+	if unit.class==UnitClass.Vehicle   and flags.neutral>0 		   then return 3 end
 	if unit.class==UnitClass.Tank      and enemy_has_tanks		   then return 2 end
-	if unit.class==UnitClass.HeavyTank and flags_enemy==0  		   then return 1 end
+	if unit.class==UnitClass.HeavyTank and flags.enemy==0  		   then return 1 end
 	if unit.class==UnitClass.Hero 	   and unit.cost<SpecialPoints then return 2 end
 
-	if unit.class==UnitClass.HeavyTank and flags_captured<flags_enemy then
+	if unit.class==UnitClass.HeavyTank and flags.captured<flags.enemy then
 		return 3
 	end
 
