@@ -1,41 +1,51 @@
-MaxSquadSize = 8
-OrderRotationPeriod = 120000 -- 2 min; 1000 tic == 1 sec
-FlagPriority = {Captured = 1, Enemy = 2, Neutral = 3}
-SpecialPoints = 10
+ModFolderName = "bot revised"			-- Mod folder name.
+MaxSquadSize = 10	
+SpecialPoints = 15
 
--- Work it harder, make it better!
+-- Work it harder, make it better! Read comments in bot.lua to properly implement mod's features.
 
-UnitClass = {
-	Infantry = "Infantry",
-	Vehicle = "Vehicle",
-	Tank = "Tank",
-	ATTank = "ATTank",
-	ATInfantry = "ATInfantry",
-	HeavyTank = "HeavyTank",
-	Hero = "Hero"
+UnitClass = {							-- Feel free to add more (or replace) unit classes or flag statuses for your mod and fully customise units behavior.
+	InfantryGen   = "inf_gen",
+	InfantryATank = "inf_a_tank",
+
+	VehicleGen    = "veh_gen",
+	VehicleArt 	  = "veh_art",
+
+	TankGen 	  = "tank_gen",
+	TankATank     = "tank_a_tank",
+	TankHeavy  	  = "tank_heavy",
+
+	Hero 	   	  = "hero"
 }
 
+FlagStatus = {
+	Clear="clear",
+	Defended="def",
+	DefendedStrong="def_strong",
+	Attacked="atk",				
+	AttackedStrong="atk_strong"
+}
 
-function readAllUnits(sq,units,army)
-	--local mod_folder_name = "tankspv2"				-- Mod folder name here.
+function readAllUnits(army)
+	local path=nil
+	local purchases={}
 
-	local path = "resource\\set\\multiplayer\\units\\"	-- Path to units folder. Example: "mods\\"..mod_folder_name.."\\resource\\set\\multiplayer\\units\\"
-														-- SET FOLDER MUST NOT BE ARCHIVED! EXTRACT IT TO RESOURCE FOLDER! Maybe this requirment will be removed soon.
-	local army = BotApi.Instance.army
-	--print(" parsing units for " .. army)
+	purchases[UnitClass.InfantryGen]   = {units={}, priority=10}
+	purchases[UnitClass.InfantryATank] = {units={}, priority=3}
 
-	local sq = path .. "squads.set"	
-	readUnitsRaw(sq,units,army)
-	local sq = path .. "soldiers.set"
-	readUnitsRaw(sq,units,army)	  
-	local sq = path .. "vehicles.set"
-	readUnitsRaw(sq,units,army)
-	local sq = path .. "vehicles_" .. army .. ".set"
-	readUnitsRaw(sq,units,army)
-	local sq = path .. "vehicles_x.set"
-	readUnitsRaw(sq,units,army)
-	local sq = path .. "vehicles_xnotanks.set"
-	readUnitsRaw(sq,units,army)
+	purchases[UnitClass.VehicleGen]    = {units={}, priority=3}
+	purchases[UnitClass.VehicleArt]    = {units={}, priority=2}
+
+	purchases[UnitClass.TankGen]  	   = {units={}, priority=3}
+	purchases[UnitClass.TankATank]     = {units={}, priority=0}
+	purchases[UnitClass.TankHeavy]     = {units={}, priority=3}
+
+	purchases[UnitClass.Hero] 		   = {units={}, priority=5}
 	
-	--print("Number of units read: ", units.count)
+	print("Reading units for: "..army)
+	path = "mods\\"..ModFolderName.."\\resource\\set\\multiplayer\\units\\"		-- Path to "units" folder. This folder can be stored directly in Bot Revised directory or in other mod's directory.
+	readSetFile(path.."squads.set", 			 purchases, army)				-- "UNITS" FOLDER MUST NOT BE ARCHIVED!
+	readSetFile(path.."vehicles_"..army..".set", purchases, army)
+
+	return purchases
 end

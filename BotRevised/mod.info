@@ -1,6 +1,6 @@
-{mod
-	{name "Bot revised"}
-	{desc "Bot revised for every modification (i hope so)."}
-	{minGameVersion "3.250"}
-	{maxGameVersion "3.265"}
+{Mod
+	{Name "Bot revised"}
+	{Desc "Bot revised AI to use with your modification. Also check out already adopted and fully compatible versions for other mods."}
+	{MinGameVersion "3.250"}
+	{MaxGameVersion "3.265"}
 }
