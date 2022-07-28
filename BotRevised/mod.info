@@ -1,6 +1,7 @@
 {Mod
-	{Name "Bot revised"}
+	{Name "Bot Revised V2"}
 	{Desc "Bot revised AI to use with your modification. Also check out already adopted and fully compatible versions for other mods."}
 	{MinGameVersion "3.250"}
 	{MaxGameVersion "3.265"}
+	{FileId "2780540106"}
 }

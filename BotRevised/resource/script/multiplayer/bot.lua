@@ -21,35 +21,30 @@ function TeamApi:createClassTables()
 end
 
 function TeamApi:new(o)
-    local o = o or {}
+    local o=o or {}
     setmetatable(o, self)
     self.__index = self
     o:createClassTables()
     return o
 end
 
-function TeamApi:calculateTeamSize()
-    local n=#self.Instances
-    self.Count=n
-    return n
-end
-
 function TeamApi:receiveUnitInfo()
 	clearTable(self.Units)
-    for k, instance in pairs(self.Instances) do
-    	instance.File:seek("set", 0)
-        for line in instance.File:lines() do
-            local properties, i = {}, 1
+    for k=1, self.Count do
+    	local file=self.Instances[k].File
+    	file:seek("set", 0)
+        for line in file:lines() do
+            local properties, i={}, 1
             for p in string.gmatch(line, "([^%s]+)") do
                 properties[i]=p
                 i=i+1
             end
-            table.insert(self.Units, {id=properties[1], class=properties[2], name=properties[3], cost=properties[4], wait_at_quant=properties[5], flag=properties[6]})
+            self.Units[#self.Units+1]={id=properties[1], class=properties[2], name=properties[3], cost=properties[4], flag=properties[5]}
         end
     end
 end
 
-function haveUnit(units, property, count, ...)				-- Yeah, i know it's ugly and it violates the encapsulation policy, but this solution is better than duplication of that function.
+function haveUnit(units, property, count, ...)		-- Yeah, i know it's ugly and it violates the encapsulation policy, but this solution is better than duplication of that function.
     local arg={...}
     if property=="class" or property=="name" then
     	for i, unit in pairs(units) do
@@ -78,8 +73,8 @@ function haveUnit(units, property, count, ...)				-- Yeah, i know it's ugly and 
 end
 
 function TeamApi:closeFiles()
-	for i, player in pairs(self.Instances) do
-		player.File:close()
+	for i=1, #self.Instances do
+		self.Instances[i].File:close()
 	end
 end
 
@@ -109,7 +104,7 @@ end
 --=====================================ContextApi=======================================
 
 Context={
-    Instance={File=nil, Id=nil, Army=nil},
+    Instance={File=nil, Id=nil, Army=nil, SpecialPoints=10, MaxSquadSize=10},
     Purchases={},
 	SpawnInfo=nil,
 	SpawnBuffer={units={}, count=0, pointer=1},
@@ -123,7 +118,7 @@ function Context:addSceneUnit(id, unit)
 	if unit==nil then
 		return false
 	end
-	self.SceneUnits[id]={class=unit.class, name=unit.name, cost=unit.cost, wait_at_quant=unit.wait_at_quant, flag=unit.flag, timer=unit.timer} -- self.SceneUnits[id]=unit creates unit's member values as references!
+	self.SceneUnits[id]={class=unit.class, name=unit.name, cost=unit.cost, flag=unit.flag, timer=unit.timer} -- self.SceneUnits[id]=unit creates unit's member values as references!
 	return true
 end
 
@@ -134,7 +129,7 @@ function Context:sendSceneUnits()
 
 	for id, unit in pairs(self.SceneUnits) do
 		if BotApi.Scene:IsSquadExists(id) then
-			self.Instance.File:write(id, " ", unit.class, " ", unit.name, " ", unit.cost, " ", unit.wait_at_quant, " ", unit.flag, "\n")
+			self.Instance.File:write(id, " ", unit.class, " ", unit.name, " ", unit.cost, " ", unit.flag, "\n")
 		else
 			if unit.timer then
 				BotApi.Events:KillQuantTimer(unit.timer)
@@ -144,11 +139,11 @@ function Context:sendSceneUnits()
 	end
 end
 
-function Context:addTimedUnit(unit)
-	BotInfoApi.Players.Me.TimedUnits[unit.group]=BotApi.Events:SetQuantTimer(function() BotInfoApi.Players.Me.TimedUnits[unit.group]=nil end, unit.charge*1000)
+function Context:setGroupTimer(group, wait_time)
+	BotInfoApi.Players.Me.TimedUnits[group]=BotApi.Events:SetQuantTimer(function() BotInfoApi.Players.Me.TimedUnits[group]=nil end, wait_time*1000)
 end
 
-function Context:isTimedUnit(group)
+function Context:checkGroupTimer(group)
 	if BotInfoApi.Players.Me.TimedUnits[group]~=nil then
 		return true
 	end
@@ -234,13 +229,9 @@ end
 --=====================================BotInfoApi=======================================
 
 BotInfoApi={
-    Path="mods\\bot revised\\resource\\script\\multiplayer\\bot_info\\",
+    Path="mods\\bot revised v2\\resource\\script\\multiplayer\\bot_info\\",
     Players={Enemy=EnemyTeam:new(nil), Team=MyTeam:new(nil), Me=Context, Count=nil}
 }
-
-function BotInfoApi:calculatePlayerCount()
-    self.Players.Count=self.Players.Team:calculateTeamSize()+self.Players.Enemy:calculateTeamSize()+1
-end
 
 function BotInfoApi:initialize()
 	local team_my=BotApi.Instance.team
@@ -268,12 +259,15 @@ function BotInfoApi:initialize()
     	if id_tmp==id_my then
     	-- Do nothing.
     	elseif filename:match(team_enemy) then
-    		table.insert(self.Players.Enemy.Instances, {File=io.open(path..filename, "r"), Id=id_tmp, Army=filename:match(army_pattern)})
+    		self.Players.Enemy.Instances[#self.Players.Enemy.Instances+1]={File=io.open(path..filename, "r"), Id=id_tmp, Army=filename:match(army_pattern)}
     	elseif filename:match(team_my) then
-			table.insert(self.Players.Team.Instances, {File=io.open(path..filename, "r"), Id=id_tmp, Army=filename:match(army_pattern)})
+			self.Players.Team.Instances[#self.Players.Team.Instances+1]={File=io.open(path..filename, "r"), Id=id_tmp, Army=filename:match(army_pattern)}
     	end
 	end
 	dir_content:close()
+	self.Players.Enemy.Count=#self.Players.Enemy.Instances
+	self.Players.Team.Count=#self.Players.Team.Instances
+	self.Players.Count=self.Players.Enemy.Count+self.Players.Team.Count+1
 end
 
 function BotInfoApi:terminate()
@@ -302,10 +296,10 @@ function readSetFile(fname, purchases, army)		-- Old system of unit parsing. It 
 
     if file~=nil then
         while true do
-            local line = file:read("*l")
-            if line == nil then break end
+            local line=file:read("*l")
+            if line==nil then break end
 
-            line = line:gsub(";.*",""):gsub("^%s*(.-)%s*$", "%1")
+            line=line:gsub(";.*",""):gsub("\t",""):gsub("^%s*(.-)%s*$", "%1")
             local class=nil
             if line:lower():find("[(]"..army.."[)]") and line:len()>0
             and line:find("ammo")==nil 		-- no ammo suppliers.
@@ -313,7 +307,7 @@ function readSetFile(fname, purchases, army)		-- Old system of unit parsing. It 
 			and line:find("flamer")==nil   	-- no flamers.
 			and line:find("radioman")==nil  -- no radiomen.
 			and line:find("oficer")==nil 	-- no oficer. Yes, one 'f'.
-			and line:find("cannon")==nil 	and line:find("how")==nil 		-- no cannons, miners, support and artys (all carried guns don't work).
+			and line:find("cannon")==nil 	and line:find("how")==nil 		-- no cannons, miners, support and artys (all carried weapons don't work).
 			and line:find("miner")==nil 	and line:find("engineer")==nil
 			and line:find("sapper")==nil 	and line:find("supply")==nil
 			and line:find("zis5")==nil 		and line:find("gmc")==nil		-- no robz supply trucks.
@@ -321,42 +315,48 @@ function readSetFile(fname, purchases, army)		-- Old system of unit parsing. It 
 			and line:find("_eng")==nil 		and line:find("_art")==nil		-- no red rising supply trucks.
 			and line:find("sdkfz303")==nil 	and line:find("np_sdkfz8")==nil -- no goliath and transport.
 			and ((line:find("hero")==nil 	and line:find("tankman")==nil) or (line:find("hero")  and line:find("tankman") and line:find("[(]\"v[0-9]")))
-			and line:find("b[(]v22[)]")==nil and line:find("b[(]special[)]")==nil -- no things for the support menu (all carried weapon don't work).
+			and line:find("b[(]v22[)]")==nil and line:find("b[(]special[)]")==nil -- no things for the support menu (all carried weapons don't work).
             then
-                local name = line:gsub( ".*name[(]", ""):gsub( "[)].*", "")
+                local name=line:gsub( ".*name[(]", ""):gsub( "[)].*", "")
                 if name:len()>0 then
                 	local group  = line:match(" g[(]([^)]*)[)]")
                 	local charge = tonumber(line:match("%s+c[(]([^)]*)[)]"))
-                	local cost	 = line:gsub( ".*[{]cost ", ""):gsub( ".*cost[(]", ""):gsub( "[})].*", ""); cost=tonumber(cost); if cost == nil then cost = 200 end
+                	local cost	 = line:gsub( ".*[{]cost ", ""):gsub( ".*cost[(]", ""):gsub( "[})].*", ""); cost=tonumber(cost); if cost==nil then cost=200 end
                 	local fore 	 = 1
                     if not name:match("{") then
                     	if line:find("bazookers") or line:find("stormtroopers2") then 
-                    		class=UnitClass.InfantryATank
+                    		class="inf_a_tank"
                     	else
-                    		class=UnitClass.InfantryGen
+                    		class="inf_gen"
                     	end
                     	fore=fore-tonumber(line:match(" f[(]([^)]*)[)]"))
                     	count=count+1
-						purchases[class].units[count] = {name = name.."("..army..")", cost = cost, charge = charge, group = group, wait_at_quant = charge*fore*40}	-- wait_at_quant value is estimated "by eye" which means that formula "charge*fore" is techically right but function OnGameQuant() is called more times than "on quant" which overincrement "Quants" variable and can lead to ai wait for unit to be unlocked. Call frequency depends on game performance (fps count). It is ridiculous but true. If game performance decreases linearly with player count, formula can be additionally divided by player count. Implementing quant timer can solve this problem but im unsure how it will affect performance.
+						purchases[class].units[count]={name=name.."("..army..")", cost=cost, charge=charge, group=group}
+						if BotInfoApi.Players.Me.TimedUnits[group]==nil then
+                            BotInfoApi.Players.Me:setGroupTimer(group, charge*fore)
+                        end
                     else
                     	if line:find("hero") 		   then
-                            class = UnitClass.Hero
+                            class="hero"
                         elseif line:find("b[(]v2[)]")  then
-                            class=UnitClass.VehicleArt
-                        elseif line:find("b[(]v5[)]")  then	-- or line:find("b[(]vet[)]")
-                            class=UnitClass.TankATank
+                            class="veh_art"
+                        elseif line:find("b[(]v5[)]")  then
+                            class="tank_a_tank"
                         elseif line:find("heavy") 	   then
-                            class=UnitClass.TankHeavy
+                            class="tank_heavy"
                         elseif line:find("b[(]v4[)]")  then
-                            class=UnitClass.TankGen
+                            class="tank_gen"
                         else
-                            class=UnitClass.VehicleGen
+                            class="veh_gen"
                         end
-                        name = line:gsub( "{\"", ""):gsub( "\".*", "")
+                        name=line:gsub( "{\"", ""):gsub( "\".*", "")
                         if not name:match("mp/") then
                         	fore=fore-tonumber(line:match("[{]fore ([^)]*)[}}][}}]"))
                         	count=count+1
-							purchases[class].units[count] = {name = name, cost = cost, charge = charge, group = group, wait_at_quant = charge*fore*40}
+							purchases[class].units[count]={name=name, cost=cost, charge=charge, group=group}
+							if BotInfoApi.Players.Me.TimedUnits[group]==nil then
+                            	BotInfoApi.Players.Me:setGroupTimer(group, charge*fore)
+                        	end
                         end
                     end
                 end
@@ -397,7 +397,7 @@ function getSpecialFlag(occupant, statuses)
 	return getPriorityFlag(BotInfoApi.Players.Me.Flags.points, BotInfoApi.Players.Me.Flags.total_rate)
 end
 
---[[function orderSpecial(id, delay)					-- Special order to use with special ai scripts, see comment below for details.
+--[[function orderSpecial(id, delay)			-- Special order to use with special ai scripts, see Artillery order comment in bot.data.lua for details.
 	BotInfoApi.Players.Me.SceneUnits[id].flag="n"
 	BotInfoApi.Players.Me.SceneUnits[id].timer=BotApi.Events:SetQuantTimer(function() BotInfoApi.Players.Me.SceneUnits[id].timer=nil end, delay)
 end--]]
@@ -406,49 +406,6 @@ function orderCaptureFlag(id, flag, delay)
 	BotApi.Commands:CaptureFlag(id, flag)
 	BotInfoApi.Players.Me.SceneUnits[id].flag=flag
 	BotInfoApi.Players.Me.SceneUnits[id].timer=BotApi.Events:SetQuantTimer(function() BotInfoApi.Players.Me.SceneUnits[id].timer=nil end, delay)
-end
-
-function setOrder(id)
-	local class=BotInfoApi.Players.Me.SceneUnits[id].class
-	if class==UnitClass.InfantryGen 						then					
-		orderCaptureFlag(id, getSpecialFlag(BotApi.Instance.enemyTeam, {[FlagStatus.Clear]={flags={}, total_rate=0}}), 150000)	-- These lines are written in a bit complicated way but there is nothing to be afraid of: just insert e.g. this line [FlagStatus.Clear]={flags={}, total_rate=0} after comma (see order for VehicleArt) to add flags with this status to flags to be found.
-	elseif class==UnitClass.VehicleGen	 					then
-		orderCaptureFlag(id, getSpecialFlag(nil, {[FlagStatus.Clear]={flags={}, total_rate=0}}), 80000)
-	elseif class==UnitClass.VehicleArt 	 					then
-		orderCaptureFlag(id, getSpecialFlag(BotApi.Instance.team, {[FlagStatus.Defended]={flags={}, total_rate=0}, [FlagStatus.Clear]={flags={}, total_rate=0}}), 240000)	-- Use orderSpecial(id, 3600000) if you have special artillery (or other unit class) behavior in your mod.
-	elseif class==UnitClass.TankHeavy 	 					then
-		orderCaptureFlag(id, getSpecialFlag(BotApi.Instance.enemyTeam, {[FlagStatus.DefendedStrong]={flags={}, total_rate=0}, [FlagStatus.Defended]={flags={}, total_rate=0}}), 120000)
-	else
-		orderCaptureFlag(id, getPriorityFlag(BotInfoApi.Players.Me.Flags.points, BotInfoApi.Players.Me.Flags.total_rate), 120000) -- 2 min; 1000 tic == 1 sec
-	end
-end
-
-function getClassPriority(class, priority, results)		-- Using "factors" to handle unit priority. Lua's string comparison time is O(1) so don't worry about performance.
-	if 	   class==UnitClass.InfantryGen 											then
-		if not results["me_have_enough_inf"] 	 	  then priority=priority+Quants
-		end
-	elseif class==UnitClass.InfantryATank 											then
-		if results["enemy_has_gen_tanks"] 	 	  	  then priority=priority+2
-		end
-	elseif class==UnitClass.VehicleGen												then
-		if BotInfoApi.Players.Me.Flags.neutral>0 	  then priority=priority+2
-		end
-	elseif class==UnitClass.VehicleArt 												then
-
-	elseif class==UnitClass.TankGen													then
-
-	elseif class==UnitClass.TankATank												then
-		if results["enemy_has_gen_tanks"] 		  	  then priority=priority+4
-		end
-	elseif class==UnitClass.TankHeavy												then
-		if 	   BotInfoApi.Players.Me.Flags.enemy==0   then priority=priority-2
-		elseif BotInfoApi.Players.Me.Flags.captured<BotInfoApi.Players.Me.Flags.enemy then priority=priority+2
-		end
-	elseif class==UnitClass.Hero 											then
-
-	end
-
-	return priority
 end
 
 function selectRandomUnit(available_units, total_rate)
@@ -471,49 +428,43 @@ function selectRandomUnit(available_units, total_rate)
 	return t
 end
 
+local Results={						-- Avoiding constructing the same table every time (see usage in function below).
+	me_have_enough_inf=nil,
+
+	enemy_has_gen_tanks=nil
+}
 function getUnitToSpawn(purchases)
 	BotInfoApi.Players.Enemy:receiveUnitInfo()
 	BotInfoApi.Players.Team:receiveUnitInfo()
 
-	local results={}
-	results["me_have_enough_inf"]  = haveUnit(BotInfoApi.Players.Me.SceneUnits, "class", 4, "inf")	-- Some examples of "factors" here. Available criterias: class, name, cost, wait_at_quant (initial unit's purchase timer).
+	Results["me_have_enough_inf"]  = haveUnit(BotInfoApi.Players.Me.SceneUnits, "class", 4, "inf_")	-- Some examples of "factors" here. Available criterias: class, name, cost.
 
-	results["enemy_has_gen_tanks"] = haveUnit(BotInfoApi.Players.Enemy.Units,   "class", 1, UnitClass.TankGen)
-	--results["enemy_has_ainf"]  	  	  = haveUnit(BotInfoApi.Players.Enemy.Units, "class", 4, "inf_a_inf", "sup_a_Inf", "veh_a_inf") 
-	--results["enemy_has_tanks"]	 	  = haveUnit(BotInfoApi.Players.Enemy.Units, "class", 1, UnitClass.VehicleAInf)
-	--results["enemy_has_hellhound"] 	  = haveUnit(BotInfoApi.Players.Enemy.Units, "name", 1, "hellhound")
+	Results["enemy_has_gen_tanks"] = haveUnit(BotInfoApi.Players.Enemy.Units,   "class", 1, "tank_gen")
+	--Results["enemy_has_ainf"]  	  	  = haveUnit(BotInfoApi.Players.Enemy.Units, "class", 4, "inf_a_inf", "sup_a_Inf", "veh_a_inf") 
+	--Results["enemy_has_tanks"]	 	  = haveUnit(BotInfoApi.Players.Enemy.Units, "class", 1, inf_a_tank)
+	--Results["enemy_has_hellhound"] 	  = haveUnit(BotInfoApi.Players.Enemy.Units, "name", 1, "hellhound")
 
-	--results["team_has_dreadnought"] 	  = haveUnit(BotInfoApi.Players.Team.Units, "name", 2, "dreadnought")
-	--results["team_has_expensive_unit"]  = haveUnit(BotInfoApi.Players.Team.Units, "cost", 1, 1000)				-- Finds units in this instance's team with cost >= 1000
+	--Results["team_has_dreadnought"] 	  = haveUnit(BotInfoApi.Players.Team.Units, "name", 2, "dreadnought")
+	--Results["team_has_expensive_unit"]  = haveUnit(BotInfoApi.Players.Team.Units, "cost", 1, 1000)		-- Finds units in this instance's team with cost >= 1000
 
-	local total_class_rate=1
-	local getCP = getClassPriority 		-- There is nothing illegal here, officer.
-	local available_class_count=0
-	local available_units={}
-
-	local quants, team_size, income = Quants, BotApi.Instance.teamSize, BotApi.Commands:Income(BotApi.Instance.playerId) 		-- Some optimisation here.
-	local formula=(374*income-31.3*income*income+1.1*income*income*income-1.3) + (354.5*team_size-23*team_size*team_size-342)	-- Formula to unlock more powerful units for purchase over time. You may reconsider it for your mod.
+	local team_size, income=BotApi.Instance.teamSize, BotApi.Commands:Income(BotApi.Instance.playerId) 		-- Some optimisation here.
+	local formula=(374*income-31.3*income*income+1.1*income*income*income-1.3)+(354.5*team_size-23*team_size*team_size-342)	-- Formula to lock or unlock more powerful units for purchase witch according to income. You may reconsider it's values for your mod.
+	local total_class_rate, available_class_count, available_units=1, 0, {}
 
 	for class, content in pairs(purchases) do
 		local unit_count=0
 		local current_class={units={}, rate=0, count=0}
 		for k, unit in pairs(content.units) do
-			if formula>=unit.cost and quants>unit.wait_at_quant then
-				if unit.charge>120 then
-					if BotInfoApi.Players.Me:isTimedUnit(unit.group) or (unit.cost<10 and unit.cost>SpecialPoints) then
-						goto continue
-					end
-				end
+			if formula>=unit.cost and not (BotInfoApi.Players.Me:checkGroupTimer(unit.group) or (unit.cost<11 and unit.cost>BotInfoApi.Players.Me.Instance.SpecialPoints)) then
 				unit_count=unit_count+1
 				current_class.units[unit_count]=unit
 			end
-			::continue::
 		end
 
 		if #current_class.units>0 then
 			available_class_count=available_class_count+1
 			available_units[class]=current_class
-			available_units[class].rate=getCP(class, content.priority, results)
+			available_units[class].rate=content["getCurrentPriority"](content.priority, Results)
 			total_class_rate=total_class_rate+available_units[class].rate
 		end
 	end
@@ -523,11 +474,11 @@ function getUnitToSpawn(purchases)
 	end
 
 	local selected_unit=selectRandomUnit(available_units, total_class_rate)
-	if selected_unit.charge>120 then										-- Timers for units are set only if unit's charge value is more than 120.
-		BotInfoApi.Players.Me:addTimedUnit(selected_unit)
+	if selected_unit.charge>80 then		-- Timers for units are set only if unit's charge value is more than 80.
+		BotInfoApi.Players.Me:setGroupTimer(selected_unit.group, selected_unit.charge)
 	end
-	if selected_unit.cost<10 then
-		SpecialPoints=SpecialPoints-selected_unit.cost
+	if selected_unit.class=="hero" then	-- Or selected_unit.cost<11
+		BotInfoApi.Players.Me.Instance.SpecialPoints=BotInfoApi.Players.Me.Instance.SpecialPoints-selected_unit.cost
 	end
 
 	BotInfoApi.Players.Me.SpawnBuffer.count=BotInfoApi.Players.Me.SpawnBuffer.count+1
@@ -543,29 +494,29 @@ function onGameStart()
 	math.randomseed(os.clock()*10000000000*BotApi.Instance.playerId*BotApi.Instance.hostId)
 
 	BotInfoApi:initialize()
-	BotInfoApi:calculatePlayerCount()
 	BotInfoApi.Players.Me.Purchases=readAllUnits(army)
 
-	--[[local marker={class="t", name="bot_marker("..army..")", cost=1, wait_at_quant=1, flag=nil, timer=nil}	-- Marker for ai scripts (used in WH40K). Enable these lines only if your mod comtains special ai scripts.
+	--[[local marker={class="tank_gen", name="bot_marker("..army..")", cost=1, flag=nil, timer=nil}	-- Marker for ai scripts (used in WH40K). Enable these lines only if your mod comtains special ai scripts.
 	BotInfoApi.Players.Me.SpawnInfo=marker
 	BotInfoApi.Players.Me.SpawnBuffer.units[BotInfoApi.Players.Me.SpawnBuffer.count]=marker]]--
 end
 
 function onGameQuant()
 	Quants=Quants+1
-	if Quants%100==0 then
+	if Quants%150==0 then
 		BotInfoApi.Players.Me:updateFlagPriorities()
 		for i, id in pairs(BotApi.Scene.Squads) do
 			if BotInfoApi.Players.Me.SceneUnits[id]==nil then 	-- Code for handling unknown units (which appear on battlefield dynamically, like marines after paradrop in WH40K).
-				BotInfoApi.Players.Me.SceneUnits[id]={class="unk", name="sq_unknown", cost=300, wait_at_quant=3000, flag=nil, timer=nil}
+				BotInfoApi.Players.Me.SceneUnits[id]={class="inf_gen", name="sq_unknown", cost=100, flag=nil, timer=nil}
 			end
 			if BotInfoApi.Players.Me.SceneUnits[id].timer==nil then
-				setOrder(id)
+				BotInfoApi.Players.Me.Purchases[BotInfoApi.Players.Me.SceneUnits[id].class]["setOrder"](id)
 			end
 		end
 		BotInfoApi.Players.Me:sendSceneUnits()
 	end
-	if BotInfoApi.Players.Me.SpawnInfo==nil or BotApi.Commands:Spawn(BotInfoApi.Players.Me.SpawnInfo.name, MaxSquadSize) then
+
+	if BotInfoApi.Players.Me.SpawnInfo==nil or BotApi.Commands:Spawn(BotInfoApi.Players.Me.SpawnInfo.name, BotInfoApi.Players.Me.Instance.MaxSquadSize) then
 		BotInfoApi.Players.Me.SpawnInfo=getUnitToSpawn(BotInfoApi.Players.Me.Purchases)
 	end
 end
@@ -574,13 +525,13 @@ function onGameSpawn(args)
 	if BotInfoApi.Players.Me:addSceneUnit(args.squadId, BotInfoApi.Players.Me.SpawnBuffer.units[BotInfoApi.Players.Me.SpawnBuffer.pointer]) then
 		BotInfoApi.Players.Me.SpawnBuffer.units[BotInfoApi.Players.Me.SpawnBuffer.pointer]=nil
 		BotInfoApi.Players.Me.SpawnBuffer.pointer=BotInfoApi.Players.Me.SpawnBuffer.pointer+1
-		setOrder(args.squadId)
+		BotInfoApi.Players.Me.Purchases[BotInfoApi.Players.Me.SceneUnits[args.squadId].class]["setOrder"](args.squadId)
 	end
 end
 
 function onGameEnd()
 	local phrases={on_victory={"gg", "ez", "We won!", "Enemy team sucks!", "Rock 'N Stone, Brothers!", "Haha, losers."},
-	 			   on_defeat={"This sucks.", "My teammates are noobs.", "Freeman you fool!", "..."}}
+	 			   on_defeat={"This sucks.", "My teammates are noobs.", "Freeman you fool!", "...", "I'm out."}}
 	
 	if math.random(7)>4 then
 		if BotInfoApi.Players.Me.Flags.captured>BotInfoApi.Players.Me.Flags.enemy then
@@ -598,11 +549,11 @@ function onGameEnd()
 end
 
 BotApi.Events:Subscribe(BotApi.Events.Init, onScriptInit)
-BotApi.Events:Subscribe(BotApi.Events.Done, onScriptDone)
 BotApi.Events:Subscribe(BotApi.Events.GameStart, onGameStart)
 BotApi.Events:Subscribe(BotApi.Events.Quant, onGameQuant)
 BotApi.Events:Subscribe(BotApi.Events.GameSpawn, onGameSpawn)
 BotApi.Events:Subscribe(BotApi.Events.GameEnd, onGameEnd)
+BotApi.Events:Subscribe(BotApi.Events.Done, onScriptDone)
 
 -- New system of unit parsing that utilises unit's "tag" property to get unit's class. You need to manually set unit classes in .set files inside their "tag" property. See ASV WH40K .set files for examples.
 
@@ -612,30 +563,34 @@ BotApi.Events:Subscribe(BotApi.Events.GameEnd, onGameEnd)
 
     if file~=nil then
         while true do
-            local line = file:read("*l")
-            if line == nil then break end
+            local line=file:read("*l")
+            if line==nil then break end
 
-            line = line:gsub(";.*",""):gsub("^%s*(.-)%s*$", "%1")
+            line=line:gsub(";.*",""):gsub("^%s*(.-)%s*$", "%1")
             local class=line:match("t[(].+%s([%a%_]+)[)]")
-            if line:lower():find("[(]"..army.."[)]") and line:len() > 0 and class~="non" then
-                local name = line:gsub( ".*name[(]", ""):gsub( "[)].*", "")
+            if line:lower():find("[(]"..army.."[)]") and line:len()>0 and class~="non" then
+                local name=line:gsub( ".*name[(]", ""):gsub( "[)].*", "")
                 if name:len()>0 then
-                	local group  = line:match(" g[(]([^)]*)[)]")
-                	local charge = tonumber(line:match("%s+c[(]([^)]*)[)]"))
-                	local cost	 = line:gsub( ".*[{]cost ", ""):gsub( ".*cost[(]", ""):gsub( "[})].*", ""); cost=tonumber(cost); if cost == nil then cost = 200 end
-                	local fore 	 = 1
+                	local group  =line:match(" g[(]([^)]*)[)]")
+                	local charge =tonumber(line:match("%s+c[(]([^)]*)[)]"))
+                	local cost	 =line:gsub( ".*[{]cost ", ""):gsub( ".*cost[(]", ""):gsub( "[})].*", ""); cost=tonumber(cost); if cost==nil then cost=200 end
+                	local fore 	 =1
                     if not name:match("{") then
                     	fore=fore-tonumber(line:match(" f[(]([^)]*)[)]"))
                     	count=count+1
-                        local unit = {name = name.."("..army..")", cost = cost, charge = charge, group = group, wait_at_quant = charge*fore*40/BotApi.Instance.teamSize}
-						purchases[class].units[count]=unit
+						purchases[class].units[count]={name=name.."("..army..")", cost=cost, charge=charge, group=group}
+						if BotInfoApi.Players.Me.TimedUnits[group]==nil then
+                            BotInfoApi.Players.Me:setGroupTimer(group, charge*fore)
+                        end
                     else
-                        name = line:gsub( "{\"", ""):gsub( "\".*", "")
+                        name=line:gsub( "{\"", ""):gsub( "\".*", "")
                         if not name:match("mp/") then
                         	fore=fore-tonumber(line:match("[{]fore ([^)]*)[}}][}}]"))
                         	count=count+1
-                            local unit = {name = name, cost = cost, charge = charge, group = group, wait_at_quant = charge*fore*40/BotApi.Instance.teamSize}
-							purchases[class].units[count]=unit
+							purchases[class].units[count]={name=name, cost=cost, charge=charge, group=group}
+							if BotInfoApi.Players.Me.TimedUnits[group]==nil then
+                            	BotInfoApi.Players.Me:setGroupTimer(group, charge*fore)
+                        	end
                         end
                     end
                 end
